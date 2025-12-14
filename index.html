@@ -1,154 +1,57 @@
-<script>
-  const WEBHOOK_URL = "/api/analyze";
-
-  const btn = document.getElementById("analyzeBtn");
-  const downloadBtn = document.getElementById("downloadBtn");
-  const statusEl = document.getElementById("status");
-  const resultBox = document.getElementById("resultBox");
-  const resultContent = document.getElementById("resultContent");
-
-  let lastData = null;
-
-  btn.addEventListener("click", async () => {
-    const keyword = document.getElementById("keyword").value.trim();
-    const dateRange = document.getElementById("dateRange").value;
-    const videoLength = document.getElementById("videoLength").value;
-    const minViews = document.getElementById("minViews").value;
-    const limit = document.getElementById("limit").value;
-
-    if (!keyword) {
-      statusEl.textContent = "키워드를 입력해주세요.";
-      statusEl.className = "status error";
-      resultBox.style.display = "none";
-      downloadBtn.style.display = "none";
-      return;
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>PANG TREND ANALYZER</title>
+  <style>
+    body {
+      margin: 0;
+      background: #05080f;
+      font-family: Arial, sans-serif;
+      color: #e8f0ff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
     }
-
-    const payload = {
-      keyword,
-      dateRange,
-      videoLength,
-      minViews: Number(minViews),
-      limit: Number(limit)
-    };
-
-    statusEl.textContent = "분석 요청 전송 중…";
-    statusEl.className = "status";
-    resultBox.style.display = "none";
-    resultContent.textContent = "";
-    downloadBtn.style.display = "none";
-    lastData = null;
-
-    try {
-      const res = await fetch(WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await res.json().catch(() => null);
-
-      if (!res.ok || !data) {
-        statusEl.textContent = "에러: 응답 상태 " + res.status;
-        statusEl.className = "status error";
-        return;
-      }
-
-      lastData = data;
-      statusEl.textContent = "분석 완료 (CSV 다운로드 시작)";
-      statusEl.className = "status ok";
-      resultBox.style.display = "block";
-      resultContent.textContent = JSON.stringify(data, null, 2);
-
-      downloadBtn.style.display = "block";
-      downloadCsvFromData(data);
-
-    } catch (err) {
-      statusEl.textContent = "요청 중 오류 발생";
-      statusEl.className = "status error";
+    .box {
+      width: 420px;
+      background: #0b1220;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 0 30px rgba(0,180,255,0.15);
     }
-  });
-
-  downloadBtn.addEventListener("click", () => {
-    if (!lastData) return;
-    downloadCsvFromData(lastData);
-  });
-
-  function downloadCsvFromData(data) {
-    const rows = extractRows(data);
-    const csv = toCsv(rows);
-    const filename = buildFilename(data);
-
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-
-    URL.revokeObjectURL(url);
-  }
-
-  function extractRows(data) {
-    const keyword = data?.keyword ?? "";
-    const items = Array.isArray(data?.items) ? data.items
-               : Array.isArray(data?.results) ? data.results
-               : [];
-
-    if (items.length && (items[0]?.id || items[0]?.title)) {
-      return items.map((it, idx) => ({
-        keyword,
-        rank: idx + 1,
-        videoId: it.id ?? "",
-        title: it.title ?? "",
-        channelTitle: it.channelTitle ?? "",
-        publishedAt: it.publishedAt ?? "",
-        viewCount: it.viewCount ?? it.views ?? "",
-        durationSeconds: it.durationSeconds ?? "",
-        url: it.url ?? (it.id ? `https://www.youtube.com/watch?v=${it.id}` : "")
-      }));
+    h1 {
+      text-align: center;
+      color: #6ddcff;
+      margin-bottom: 6px;
     }
-
-    return [{
-      keyword,
-      rank: 1,
-      videoId: "",
-      title: data?.message ?? "",
-      channelTitle: "",
-      publishedAt: "",
-      viewCount: "",
-      durationSeconds: "",
-      url: ""
-    }];
-  }
-
-  function buildFilename(data) {
-    const k = (data?.keyword || "trend").toString().trim().replace(/\s+/g, "_").slice(0, 30);
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `trend_result_${k}_${y}${m}${day}.csv`;
-  }
-
-  function toCsv(rows) {
-    const headers = ["keyword","rank","videoId","title","channelTitle","publishedAt","viewCount","durationSeconds","url"];
-    const lines = [];
-    lines.push(headers.join(","));
-    for (const r of rows) {
-      const line = headers.map(h => csvEscape(r[h])).join(",");
-      lines.push(line);
+    .sub {
+      text-align: center;
+      font-size: 13px;
+      color: #8aa4c9;
+      margin-bottom: 20px;
     }
-    return "\uFEFF" + lines.join("\n");
-  }
-
-  function csvEscape(v) {
-    if (v === null || v === undefined) return "";
-    const s = String(v);
-    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-    return s;
-  }
-</script>
+    input {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: none;
+      outline: none;
+      background: #121a2e;
+      color: #fff;
+      margin-bottom: 12px;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      font-size: 15px;
+      margin-bottom: 10px;
+    }
+    #analyzeBtn {
+      background: linear-gradient(90deg,#4fd1ff,#9b6bff);
+      color: #000;
+      font-weight:
