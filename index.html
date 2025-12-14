@@ -1,111 +1,166 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8" />
-  <title>PANG TREND ANALYZER</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; padding: 0;
-      background: #05070b; color: #e4e6eb;
-      font-family: -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
-      display: flex; justify-content: center; align-items: flex-start;
-      min-height: 100vh;
-    }
-    .container { width: 100%; max-width: 420px; margin: 40px 16px; }
-    .title { text-align: center; margin-bottom: 20px; }
-    .title h1 {
-      margin: 0; font-size: 26px; font-weight: 700;
-      letter-spacing: 0.04em; color: #3ec9f7;
-      text-shadow: 0 0 10px #3ec9f7, 0 0 20px #a24bff;
-    }
-    .title p { margin: 8px 0 0; font-size: 13px; color: #8d9bb5; }
-    .panel {
-      background: rgba(10, 12, 18, 0.96);
-      border-radius: 16px; padding: 22px 20px 18px;
-      box-shadow: 0 0 28px rgba(0,0,0,0.7), 0 0 24px rgba(62,201,247,0.15);
-      border: 1px solid rgba(62,201,247,0.12);
-    }
-    label { display: block; margin: 10px 0 6px; font-size: 13px; color: #9aa8c5; }
-    input, select {
-      width: 100%; padding: 9px 10px; border-radius: 10px;
-      border: 1px solid #262b38; background: #10131b; color: #f5f6f8;
-      outline: none; font-size: 14px;
-    }
-    .neon-btn {
-      width: 100%; margin-top: 18px; padding: 11px;
-      border-radius: 999px; border: none;
-      background: linear-gradient(120deg,#3ec9f7,#a24bff);
-      color:#05070b; font-size:15px; font-weight:700; cursor:pointer;
-    }
-    .status { margin-top: 12px; font-size: 12px; min-height:16px; }
-    .status.error { color:#ff6b81; }
-    .status.ok { color:#47ffb5; }
-    .result-box {
-      margin-top:18px; font-family:monospace;
-      font-size:11px; background:rgba(6,8,14,0.96);
-      border-radius:12px; padding:10px 12px;
-      border:1px solid rgba(62,201,247,0.18);
-      max-height:220px; overflow:auto; white-space:pre-wrap;
-      display:none;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="title">
-      <h1>PANG TREND ANALYZER</h1>
-      <p>키워드 기반 트렌드 탐색 · 연결 확인 단계</p>
-    </div>
+<script>
+  // 🔗 Vercel API 엔드포인트
+  const WEBHOOK_URL = "/api/analyze";
 
-    <div class="panel">
-      <label>키워드</label>
-      <input id="keyword" type="text" placeholder="예: snow leopard" />
+  const btn = document.getElementById("analyzeBtn");
+  const downloadBtn = document.getElementById("downloadBtn");
+  const statusEl = document.getElementById("status");
+  const resultBox = document.getElementById("resultBox");
+  const resultContent = document.getElementById("resultContent");
 
-      <button id="analyzeBtn" class="neon-btn">분석 시작</button>
+  let lastData = null; // 마지막 분석 결과 저장(다운로드 재클릭용)
 
-      <div id="status" class="status"></div>
-      <div id="resultBox" class="result-box"></div>
-    </div>
-  </div>
+  btn.addEventListener("click", async () => {
+    const keyword = document.getElementById("keyword").value.trim();
+    const dateRange = document.getElementById("dateRange").value;
+    const videoLength = document.getElementById("videoLength").value;
+    const minViews = document.getElementById("minViews").value;
+    const limit = document.getElementById("limit").value;
 
-  <script>
-    const WEBHOOK_URL = "/api/analyze";
-    const btn = document.getElementById("analyzeBtn");
-    const statusEl = document.getElementById("status");
-    const resultBox = document.getElementById("resultBox");
+    if (!keyword) {
+      statusEl.textContent = "키워드를 입력해주세요.";
+      statusEl.className = "status error";
+      resultBox.style.display = "none";
+      downloadBtn.style.display = "none";
+      return;
+    }
 
-    btn.addEventListener("click", async () => {
-      const keyword = document.getElementById("keyword").value.trim();
-      if (!keyword) {
-        statusEl.textContent = "키워드를 입력하세요.";
+    const payload = {
+      keyword,
+      dateRange,
+      videoLength,
+      minViews: Number(minViews),
+      limit: Number(limit)
+    };
+
+    statusEl.textContent = "분석 요청 전송 중…";
+    statusEl.className = "status";
+    resultBox.style.display = "none";
+    resultContent.textContent = "";
+    downloadBtn.style.display = "none";
+    lastData = null;
+
+    try {
+      const res = await fetch(WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok || !data) {
+        statusEl.textContent = "에러: 응답 상태 " + res.status;
         statusEl.className = "status error";
         return;
       }
 
-      statusEl.textContent = "요청 중...";
-      statusEl.className = "status";
-      resultBox.style.display = "none";
-      resultBox.textContent = "";
+      // 화면 출력
+      lastData = data;
+      statusEl.textContent = "분석 완료 (CSV 다운로드 시작)";
+      statusEl.className = "status ok";
+      resultBox.style.display = "block";
+      resultContent.textContent = JSON.stringify(data, null, 2);
 
-      try {
-        const res = await fetch(WEBHOOK_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ keyword })
-        });
+      // CSV 다운로드 버튼 활성화 + 즉시 다운로드
+      downloadBtn.style.display = "block";
+      downloadCsvFromData(data);
 
-        const data = await res.json();
-        statusEl.textContent = "완료";
-        statusEl.className = "status ok";
-        resultBox.style.display = "block";
-        resultBox.textContent = JSON.stringify(data, null, 2);
-      } catch (e) {
-        statusEl.textContent = "오류 발생";
-        statusEl.className = "status error";
-      }
-    });
-  </script>
-</body>
-</html>
+    } catch (err) {
+      statusEl.textContent = "요청 중 오류 발생";
+      statusEl.className = "status error";
+    }
+  });
+
+  // 다운로드 버튼: 마지막 결과 재다운로드
+  downloadBtn.addEventListener("click", () => {
+    if (!lastData) return;
+    downloadCsvFromData(lastData);
+  });
+
+  function downloadCsvFromData(data) {
+    const rows = extractRows(data);
+    const csv = toCsv(rows);
+    const filename = buildFilename(data);
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    URL.revokeObjectURL(url);
+  }
+
+  // API 응답 형태가 달라도 동작하도록 흡수
+  function extractRows(data) {
+    const keyword = data?.keyword ?? "";
+    const items = Array.isArray(data?.items) ? data.items
+               : Array.isArray(data?.results) ? data.results
+               : [];
+
+    // YouTube 실데이터(items) 기준 컬럼
+    if (items.length && (items[0]?.id || items[0]?.title)) {
+      return items.map((it, idx) => ({
+        keyword,
+        rank: idx + 1,
+        videoId: it.id ?? "",
+        title: it.title ?? "",
+        channelTitle: it.channelTitle ?? "",
+        publishedAt: it.publishedAt ?? "",
+        viewCount: it.viewCount ?? it.views ?? "",
+        durationSeconds: it.durationSeconds ?? "",
+        url: it.url ?? (it.id ? `https://www.youtube.com/watch?v=${it.id}` : "")
+      }));
+    }
+
+    // fallback (연결/에코 응답 등)
+    return [{
+      keyword,
+      rank: 1,
+      videoId: "",
+      title: data?.message ?? "",
+      channelTitle: "",
+      publishedAt: "",
+      viewCount: "",
+      durationSeconds: "",
+      url: ""
+    }];
+  }
+
+  function buildFilename(data) {
+    const k = (data?.keyword || "trend").toString().trim().replace(/\s+/g, "_").slice(0, 30);
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `trend_result_${k}_${y}${m}${day}.csv`;
+  }
+
+  function toCsv(rows) {
+    // 고정 헤더
+    const headers = ["keyword","rank","videoId","title","channelTitle","publishedAt","viewCount","durationSeconds","url"];
+    const lines = [];
+    lines.push(headers.join(","));
+
+    for (const r of rows) {
+      const line = headers.map(h => csvEscape(r[h])).join(",");
+      lines.push(line);
+    }
+
+    // Excel 한글/UTF-8 깨짐 방지용 BOM
+    return "\uFEFF" + lines.join("\n");
+  }
+
+  function csvEscape(v) {
+    if (v === null || v === undefined) return "";
+    const s = String(v);
+    // 콤마/따옴표/개행 포함 시 따옴표로 감싸고 따옴표는 2개로 이스케이프
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  }
+</script>
