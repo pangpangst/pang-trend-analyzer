@@ -1,57 +1,108 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8" />
-  <title>PANG TREND ANALYZER</title>
-  <style>
-    body {
-      margin: 0;
-      background: #05080f;
-      font-family: Arial, sans-serif;
-      color: #e8f0ff;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
+<script>
+  // 1) API 엔드포인트 (반드시 이대로)
+  const WEBHOOK_URL = "/api/analyze";
+
+  // 2) 최신 분석 결과를 저장해 CSV로 뽑기
+  let latestResults = null;
+
+  function escapeCsv(value) {
+    if (value === null || value === undefined) return '';
+    const s = String(value).replace(/"/g, '""');
+    return `"${s}"`;
+  }
+
+  function makeCsv(data) {
+    const rows = [];
+    rows.push([
+      'keyword','rank','title','channel','views','uploaded','url','insight'
+    ].map(escapeCsv).join(','));
+
+    const keyword = data?.keyword ?? '';
+    const results = Array.isArray(data?.results) ? data.results : [];
+
+    for (const r of results) {
+      rows.push([
+        keyword,
+        r.rank ?? '',
+        r.title ?? '',
+        r.channelTitle ?? r.channel ?? '',
+        r.views ?? '',
+        r.uploaded ?? r.publishedAt ?? '',
+        r.url ?? '',
+        r.insight ?? ''
+      ].map(escapeCsv).join(','));
     }
-    .box {
-      width: 420px;
-      background: #0b1220;
-      border-radius: 16px;
-      padding: 24px;
-      box-shadow: 0 0 30px rgba(0,180,255,0.15);
+    return rows.join('\n');
+  }
+
+  function downloadCsv(filename, csvText) {
+    const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  // 3) 버튼 연결
+  const downloadBtn = document.getElementById('downloadCsvBtn');
+  downloadBtn.addEventListener('click', () => {
+    if (!latestResults) return;
+    const csv = makeCsv(latestResults);
+    downloadCsv('trend_result.csv', csv);
+  });
+
+  // 4) 분석 시작 버튼 핸들러 (id가 다르면, 그 id로 바꾸세요)
+  //    - 기존 코드가 있으면 이 부분만 "핵심 로직" 참고해서 합치면 됩니다.
+  const analyzeBtn = document.getElementById('analyzeBtn'); // 없으면 본인 버튼 id로 변경
+  const keywordInput = document.getElementById('keyword');  // 없으면 본인 input id로 변경
+  const outputEl = document.getElementById('output');       // 없으면 본인 결과 박스 id로 변경
+
+  async function runAnalyze() {
+    const keyword = (keywordInput?.value || '').trim();
+    if (!keyword) {
+      if (outputEl) outputEl.textContent = "키워드를 입력하세요.";
+      return;
     }
-    h1 {
-      text-align: center;
-      color: #6ddcff;
-      margin-bottom: 6px;
+
+    if (outputEl) outputEl.textContent = "분석 중...";
+
+    // 다운로드 버튼 비활성화(새 결과 나오기 전)
+    latestResults = null;
+    downloadBtn.disabled = true;
+    downloadBtn.style.cursor = 'not-allowed';
+    downloadBtn.style.opacity = '0.6';
+
+    try {
+      const res = await fetch(WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword })
+      });
+
+      const data = await res.json();
+
+      // 화면 표시
+      if (outputEl) outputEl.textContent = JSON.stringify(data, null, 2);
+
+      // CSV용 저장 + 버튼 활성화
+      if (data && data.ok) {
+        latestResults = data;
+        downloadBtn.disabled = false;
+        downloadBtn.style.cursor = 'pointer';
+        downloadBtn.style.opacity = '1';
+      } else {
+        if (outputEl) outputEl.textContent = JSON.stringify(data, null, 2);
+      }
+    } catch (e) {
+      if (outputEl) outputEl.textContent = "에러: " + (e?.message || e);
     }
-    .sub {
-      text-align: center;
-      font-size: 13px;
-      color: #8aa4c9;
-      margin-bottom: 20px;
-    }
-    input {
-      width: 100%;
-      padding: 12px;
-      border-radius: 8px;
-      border: none;
-      outline: none;
-      background: #121a2e;
-      color: #fff;
-      margin-bottom: 12px;
-    }
-    button {
-      width: 100%;
-      padding: 12px;
-      border-radius: 999px;
-      border: none;
-      cursor: pointer;
-      font-size: 15px;
-      margin-bottom: 10px;
-    }
-    #analyzeBtn {
-      background: linear-gradient(90deg,#4fd1ff,#9b6bff);
-      color: #000;
-      font-weight:
+  }
+
+  if (analyzeBtn) {
+    analyzeBtn.addEventListener('click', runAnalyze);
+  }
+</script>
